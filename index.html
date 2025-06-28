@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>İnteraktiv Layihə Məsləhətçisi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+        }
+        .screen {
+            display: none;
+        }
+        .screen.active {
+            display: block;
+        }
+        .question-card {
+            display: none;
+        }
+        .question-card.active {
+            display: block;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .option-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .option-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+        }
+        .progress-bar-inner {
+            transition: width 0.4s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex items-center justify-center p-4">
+
+<div id="app-container" class="w-full max-w-3xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div id="app-content" class="p-6 md:p-10">
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="screen active text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-indigo-600 mb-4">Layihə Kəşfiyyat Aləti</h1>
+            <p class="text-gray-600 mb-8 max-w-lg mx-auto">
+                Bu interaktiv sorğu ilə sizin üçün ən uyğun Arduino və Süni İntellekt layihəsini birlikdə kəşf edək. Proses iki mərhələdən ibarət olacaq: əvvəlcə gənc ixtiraçı, sonra isə valideyn sualları cavablandıracaq.
+            </p>
+            <button id="start-btn" class="w-full sm:w-auto bg-indigo-600 text-white font-bold py-3 px-10 rounded-lg text-lg hover:bg-indigo-700 transition duration-300 shadow-lg">
+                Sorğuya Başla
+            </button>
+        </div>
+
+        <!-- Questionnaire Screen -->
+        <div id="questionnaire-screen" class="screen">
+            <div id="quiz-header" class="mb-6 text-center">
+                <h2 id="quiz-title" class="text-2xl font-bold text-gray-700"></h2>
+                <p id="quiz-subtitle" class="text-gray-500"></p>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-gray-200 rounded-full h-3 mb-6">
+                <div id="progress-bar" class="bg-indigo-500 h-3 rounded-full" style="width: 0%"></div>
+            </div>
+            <div id="question-container" class="min-h-[350px]">
+                <!-- Questions will be injected here -->
+            </div>
+        </div>
+
+        <!-- Results Screen -->
+        <div id="results-screen" class="screen">
+            <div class="text-center">
+                <h2 class="text-3xl md:text-4xl font-bold text-indigo-600 mb-2">Analiz Tamamlandı!</h2>
+                <p class="text-gray-600 mb-8">Şagirdin maraqları və valideynin gözləntiləri nəzərə alınaraq, sizin üçün ən yüksək uyğunluq göstərən layihələr bunlardır:</p>
+                <div id="results-container" class="space-y-6 text-left">
+                    <!-- Results will be injected here -->
+                </div>
+                <button id="restart-btn" class="mt-10 bg-gray-500 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-gray-600 transition duration-300">
+                    Yenidən Başla
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- DATA ---
+    const SCORE_PROFILES = {
+        HOME_AUTO: { name: 'Gələcəyin Evi: Ağıllı Məkanlar', icon: '🏠' },
+        FASHION_TECH: { name: 'Moda və Stil Texnologiyaları', icon: '👗' },
+        ECOLOGY: { name: 'Yaşıl Texnologiyalar', icon: '🌿' },
+        GAMES_ENTERTAINMENT: { name: 'Rəqəmsal Əyləncə və Oyunlar', icon: '🎮' },
+        ROBOTICS: { name: 'Robotlar Dünyası', icon: '🤖' },
+        URBAN_TECH: { name: 'Ağıllı Şəhər və Nəqliyyat', icon: '🏙️' },
+        HEALTH_CARE: { name: 'Sağlam Həyat və Dəstək', icon: '❤️' },
+        SECURITY_LOGIC: { name: 'Təhlükəsiz Həyat', icon: '🛡️' },
+        ART_DESIGN: { name: 'Kreativ Dizayn və Rəqəmsal Sənət', icon: '🎨' },
+        BUSINESS: { name: 'Gənc Sahibkar', icon: '📈' }
+    };
+
+    const studentQuestions = [
+        { text: "Boş vaxtlarında aşağıdakılardan hansını etmək sənə daha çox zövq verir?", options: [
+                { text: "LEGO və ya konstruktorla yeni qurğular yığmaq.", scores: { ROBOTICS: 2, HOME_AUTO: 1 } },
+                { text: "Rəsm çəkmək, fərqli materiallardan nəsə düzəltmək, dizayn etmək.", scores: { ART_DESIGN: 2, FASHION_TECH: 1 } },
+                { text: "Kompüterdə və ya telefonda oyunlar oynamaq.", scores: { GAMES_ENTERTAINMENT: 2 } },
+                { text: "Heyvanlar, bitkilər haqqında sənədli filmlərə baxmaq, təbiətdə olmaq.", scores: { ECOLOGY: 2, HEALTH_CARE: 1 } }
+            ]},
+        { text: "Bir qutun var və onu heç kimin aça bilməməsini istəyirsən. Hansı müdafiə üsulunu seçərdin?", options: [
+                { text: "Yalnız mənim barmaq izimlə və ya gizli kodla açılan kilid.", scores: { SECURITY_LOGIC: 2, ROBOTICS: 1 } },
+                { text: "Qutuya yaxınlaşanda səs-küy salan bir siqnalizasiya.", scores: { HOME_AUTO: 1, SECURITY_LOGIC: 1 } },
+                { text: "Qutunu çox yaxşı gizlədərdim, heç kimin ağlına gəlməyən bir yerdə.", scores: { GAMES_ENTERTAINMENT: 1 } },
+                { text: "Qutunun üzərini elə bəzəyərdim ki, heç kim onun bir seyf olduğunu başa düşməzdi.", scores: { ART_DESIGN: 2 } }
+            ]},
+        { text: "Dərsdən sonra yorğun gəlmisən. Hansı texnoloji köməkçi sənin üçün ən faydalı olardı?", options: [
+                { text: "Otağımın işığını və temperaturunu avtomatik ideal vəziyyətə gətirən bir sistem.", scores: { HOME_AUTO: 2, HEALTH_CARE: 1 } },
+                { text: "Mənim üçün sağlam və dadlı yemək hazırlayan bir robot.", scores: { ROBOTICS: 2, HEALTH_CARE: 1 } },
+                { text: "Əhvalımı yaxşılaşdıran musiqini avtomatik seçib çalan dinamiklər.", scores: { ART_DESIGN: 1, GAMES_ENTERTAINMENT: 1 } },
+                { text: "Sabahkı dərslərim üçün çantamı özü yığan bir köməkçi.", scores: { BUSINESS: 1, ROBOTICS: 1 } }
+            ]},
+        { text: "Gələcəyin şəhərini necə təsəvvür edirsən?", options: [
+                { text: "Hər yerdə robotların insanlara kömək etdiyi bir şəhər.", scores: { ROBOTICS: 2, URBAN_TECH: 1 } },
+                { text: "Nəqliyyatın tam avtomatlaşdırıldığı, tıxacların olmadığı bir şəhər.", scores: { URBAN_TECH: 2, BUSINESS: 1 } },
+                { text: "Binaların və parkların bol yaşıllıqla dolu olduğu, təmiz havalı bir şəhər.", scores: { ECOLOGY: 2, URBAN_TECH: 1 } },
+                { text: "İnsanların geyimlərinin texnoloji olduğu, hər kəsin fərqli göründüyü bir şəhər.", scores: { FASHION_TECH: 2, ART_DESIGN: 1 } }
+            ]},
+        { text: "Əgər bir oyun yaratsaydın, o necə bir oyun olardı?", options: [
+                { text: "Strateji və məntiq tələb edən, şəhər və ya qala qurma oyunu.", scores: { BUSINESS: 1, URBAN_TECH: 1, GAMES_ENTERTAINMENT: 1 } },
+                { text: "Macəra dolu, gizli xəzinələr axtarılan bir kəşfiyyat oyunu.", scores: { GAMES_ENTERTAINMENT: 2 } },
+                { text: "Öz geyimini və obrazını dizayn edə bildiyin bir yaradıcılıq oyunu.", scores: { FASHION_TECH: 2, ART_DESIGN: 1 } },
+                { text: "Dostlarla yarışa biləcəyim sürət və reaksiya tələb edən bir oyun.", scores: { GAMES_ENTERTAINMENT: 2 } }
+            ]},
+        { text: "Bir əşyanı düzəldərkən sənin üçün ən vacib olan nədir?", options: [
+                { text: "Onun mükəmməl və səhvsiz işləməsi.", scores: { ROBOTICS: 1, SECURITY_LOGIC: 1, ENGINEERING:1 } },
+                { text: "Onun gözəl, fərqli və diqqətçəkən görünməsi.", scores: { ART_DESIGN: 2, FASHION_TECH: 1 } },
+                { text: "Onun kiminsə işinə yaraması, həyatını asanlaşdırması.", scores: { HEALTH_CARE: 2, ECOLOGY: 1 } },
+                { text: "Prosesin özü, yeni bir şey kəşf etmək və öyrənmək.", scores: { GAMES_ENTERTAINMENT: 1 } }
+            ]},
+        { text: "Hansı fikir səni daha çox həyəcanlandırır?", options: [
+                { text: "Yıxılan insanlara kömək edən bir tibbi robot.", scores: { ROBOTICS: 1, HEALTH_CARE: 2 } },
+                { text: "Çirklənmiş suyu təmizləyən bir filtr sistemi.", scores: { ECOLOGY: 2 } },
+                { text: "Sürücüsüz hərəkət edən bir velosiped.", scores: { URBAN_TECH: 2, ROBOTICS: 1 } },
+                { text: "Mağazadakı bütün prosesləri idarə edən bir ağıllı sistem.", scores: { BUSINESS: 2, HOME_AUTO: 1 } }
+            ]},
+        { text: "Bir rəsm çəksəydin, bu nə olardı?", options: [
+                { text: "Mürəkkəb bir mexanizmin və ya binanın detallı təsviri.", scores: { ROBOTICS: 1, URBAN_TECH: 1 } },
+                { text: "Rəngarəng və abstrakt bir kompozisiya.", scores: { ART_DESIGN: 2 } },
+                { text: "Gələcəkdən gəlmiş bir moda dizaynı.", scores: { FASHION_TECH: 2 } },
+                { text: "Sakit bir təbiət mənzərəsi.", scores: { ECOLOGY: 2 } }
+            ]},
+        { text: "Bir problemi həll etmək üçün hansı yolu seçərsən?", options: [
+                { text: "Əvvəlcə problemi hissələrə bölüb, hər birini ayrı-ayrılıqda həll edərəm.", scores: { SECURITY_LOGIC: 1, BUSINESS: 1 } },
+                { text: "Problemin həllinin başqalarına necə təsir edəcəyini düşünərəm.", scores: { HEALTH_CARE: 1, ECOLOGY: 1 } },
+                { text: "Ən ağlasığmaz və kreativ həll yolunu axtararam.", scores: { ART_DESIGN: 1, GAMES_ENTERTAINMENT: 1 } },
+                { text: "Bu problemi həll etmək üçün hansı alətlər və ya qurğular lazım olduğunu araşdıraram.", scores: { ROBOTICS: 2 } }
+            ]},
+        { text: "Dostun üçün bir hədiyyə düzəltməlisən. Nə düzəldərdin?", options: [
+                { text: "Onun sevdiyi oyunun personajının hərəkət edən fiqurunu.", scores: { ROBOTICS: 1, GAMES_ENTERTAINMENT: 2 } },
+                { text: "Onun adının baş hərfləri ilə işıqlanan bir stolüstü lampa.", scores: { ART_DESIGN: 1, HOME_AUTO: 1 } },
+                { text: "Duruşunu düz saxlamağa kömək edən bir ağıllı yastıqça.", scores: { HEALTH_CARE: 2 } },
+                { text: "Üzərində ikinizin şəkli olan və musiqi çalan bir qutu.", scores: { ART_DESIGN: 2 } }
+            ]}
+    ];
+
+    const parentQuestions = [
+        { text: "Övladınızın asudə vaxtında ən çox nəyə diqqət yetirdiyini müşahidə edirsiniz?", options: [
+                { text: "Bir şeylərin necə işlədiyini anlamağa, söküb-yığmağa.", scores: { ROBOTICS: 1, SECURITY_LOGIC: 1 } },
+                { text: "Vizual yaradıcılığa, rəsmə, dizayna.", scores: { ART_DESIGN: 1, FASHION_TECH: 1 } },
+                { text: "Qaydalara əsaslanan oyunlara, strategiya qurmağa.", scores: { GAMES_ENTERTAINMENT: 1, BUSINESS: 1 } },
+                { text: "Canlılara qarşı həssaslığa, təbiətə və ya sosial məsələlərə.", scores: { ECOLOGY: 1, HEALTH_CARE: 1 } }
+            ]},
+        { text: "Bu kursun övladınıza hansı əsas bacarığı qazandırmasını hədəfləyirsiniz?", options: [
+                { text: "Məntiqi və alqoritmik düşüncəni, gələcək mühəndislik biliklərinin təməlini.", scores: { ROBOTICS: 1, SECURITY_LOGIC: 1, URBAN_TECH: 1 } },
+                { text: "Yaradıcılığını və təxəyyülünü istifadə edərək özünü ifadə etməsini.", scores: { ART_DESIGN: 1, FASHION_TECH: 1, GAMES_ENTERTAINMENT: 1 } },
+                { text: "Real həyat problemlərinə texnoloji həllər tapmağı öyrənməsini.", scores: { ECOLOGY: 1, HEALTH_CARE: 1, BUSINESS: 1 } },
+                { text: "Səbrlə bir layihə üzərində işləyib sona çatdırmaq vərdişini.", scores: { } }
+            ]},
+        { text: "Övladınız bir tapşırıqla qarşılaşanda hansı davranış daha xarakterikdir?", options: [
+                { text: "Səhvlərdən qorxmur, cəsarətlə fərqli yolları sınayır.", scores: { GAMES_ENTERTAINMENT: 1, ART_DESIGN: 1 } },
+                { text: "Çox sual verir, hər detalı aydınlaşdırmadan işə başlamır.", scores: { SECURITY_LOGIC: 1 } },
+                { text: "Komanda ilə işləməyə, başqalarının fikrini almağa daha çox meyillidir.", scores: { BUSINESS: 1 } },
+                { text: "Tək başına, səssizcə işləməyi üstün tutur.", scores: { ROBOTICS: 1 } }
+            ]},
+        { text: "Sizcə, övladınız üçün hansı tip layihə daha motivasiyaedici olar?", options: [
+                { text: "Gündəlik həyatda istifadə edə biləcəyi praktiki bir cihaz.", scores: { HOME_AUTO: 1, HEALTH_CARE: 1 } },
+                { text: "Gözəl və estetik görünüşü olan, bəzək və ya sənət əsəri.", scores: { ART_DESIGN: 1, FASHION_TECH: 1 } },
+                { text: "Qaydaları olan, yarış elementi daşıyan bir oyun və ya robot.", scores: { GAMES_ENTERTAINMENT: 1, ROBOTICS: 1 } },
+                { text: "Cəmiyyətə və ya təbiətə faydalı olan bir layihə.", scores: { ECOLOGY: 1, URBAN_TECH: 1 } }
+            ]},
+        { text: "Övladınızın gələcək karyerasını hansı sahəyə daha yaxın görürsünüz?", options: [
+                { text: "Mühəndislik, İT, texniki sahələr.", scores: { ROBOTICS: 1, SECURITY_LOGIC: 1, URBAN_TECH: 1, BUSINESS: 1 } },
+                { text: "Dizayn, incəsənət, moda, media.", scores: { ART_DESIGN: 1, FASHION_TECH: 1, GAMES_ENTERTAINMENT: 1 } },
+                { text: "Tibb, psixologiya, ekologiya, sosial iş.", scores: { HEALTH_CARE: 1, ECOLOGY: 1 } },
+                { text: "Hələ ki, müəyyən etmək çətindir, fərqli sahələri yoxlamasını istərdim.", scores: { } }
+            ]},
+        { text: "Övladınızın hansı qabiliyyətinin daha güclü olduğunu düşünürsünüz?", options: [
+                { text: "Problem həll etmə və analitik düşüncə.", scores: { ROBOTICS: 1, SECURITY_LOGIC: 1 } },
+                { text: "Vizual təxəyyül və estetik hissiyyat.", scores: { ART_DESIGN: 1, FASHION_TECH: 1 } },
+                { text: "Empatiya və başqalarını anlamaq.", scores: { HEALTH_CARE: 1, ECOLOGY: 1 } },
+                { text: "Sistemli düşünmə və planlaşdırma.", scores: { BUSINESS: 1, URBAN_TECH: 1 } }
+            ]},
+        { text: "Kursun sonunda əsas gözləntiniz nədir?", options: [
+                { text: "Özünə inamının artması və yeni bir hobbiyə yiyələnməsi.", scores: { } },
+                { text: "Konkret texniki bacarıqlar qazanması.", scores: { ROBOTICS: 1, SECURITY_LOGIC: 1 } },
+                { text: "Yaradıcılığını ortaya çıxarması.", scores: { ART_DESIGN: 1, FASHION_TECH: 1 } },
+                { text: "Gələcək peşə seçiminə kömək etməsi.", scores: { BUSINESS: 1, URBAN_TECH: 1 } }
+            ]},
+        { text: "Övladınız adətən hansı tip filmlərə və ya kitablara maraq göstərir?", options: [
+                { text: "Fantastika, robotlar və gələcək texnologiyaları haqqında.", scores: { ROBOTICS: 1, URBAN_TECH: 1 } },
+                { text: "Macəra və kəşfiyyat.", scores: { GAMES_ENTERTAINMENT: 1, ECOLOGY: 1 } },
+                { text: "Detektiv və tapmacalarla dolu olanlar.", scores: { SECURITY_LOGIC: 1 } },
+                { text: "Dizayn, moda və ya incəsənət haqqında.", scores: { ART_DESIGN: 1, FASHION_TECH: 1 } }
+            ]},
+        { text: "Övladınızın bir şeyə marağını nə daha uzun müddət saxlayır?", options: [
+                { text: "Rəqabət və qalib gəlmək imkanı.", scores: { GAMES_ENTERTAINMENT: 1 } },
+                { text: "Daim yeni bir şey kəşf etmək və təkmilləşdirmək.", scores: { ROBOTICS: 1, BUSINESS: 1 } },
+                { text: "Yaratdığı şeyin başqaları tərəfindən bəyənilməsi.", scores: { ART_DESIGN: 1, FASHION_TECH: 1 } },
+                { text: "Yaratdığı şeyin faydalı və köməkçi olması.", scores: { HEALTH_CARE: 1, ECOLOGY: 1 } }
+            ]},
+        { text: "Hansı ifadə övladınızı daha yaxşı təsvir edir?", options: [
+                { text: "Praktikdir, nəzəriyyədən çox real nəticələrə önəm verir.", scores: { HOME_AUTO: 1, BUSINESS: 1 } },
+                { text: "Xəyalpərəstdir, ideyaları və təxəyyülü güclüdür.", scores: { ART_DESIGN: 1, FASHION_TECH: 1, GAMES_ENTERTAINMENT: 1 } },
+                { text: "Ədalətlidir, qaydalara və struktura hörmət edir.", scores: { SECURITY_LOGIC: 1 } },
+                { text: "Qayğıkeşdir, ətrafındakıların hisslərinə qarşı həssasdır.", scores: { HEALTH_CARE: 1, ECOLOGY: 1 } }
+            ]}
+    ];
+
+    const allProjects = {
+        HOME_AUTO: [ { name: "Öyrənən İşıqlandırma", id: "1.1" }, { name: "Fərdi Oyanış Sistemi", id: "1.2" }, { name: "Ağıllı Bitki Güldanı", id: "1.3" }, { name: "Səsli İdarəetmə Mərkəzi", id: "1.4" }, { name: "Giriş-Çıxış Qeydiyyatçısı", id: "1.5" }, { name: "İqlimə Nəzarət Qurğusu", id: "1.6" }, { name: "Avtomatik Pəncərə Sistemi", id: "1.7" }, { name: "Gigiyenik Zibil Qutusu", id: "1.8" }, { name: "Ev Heyvanı üçün Virtual Sərhəd", id: "1.9" }, { name: "Mətbəx Təhlükəsizliyi", id: "1.10" } ],
+        FASHION_TECH: [ { name: "Rəngə Uyğunlaşan Aksesuar", id: "2.1" }, { name: "İşıqlı Addımlar", id: "2.2" }, { name: "İnteraktiv T-shirt", id: "2.3" }, { name: "Musiqi Ritmi ilə Parıldayan Geyim", id: "2.4" }, { name: "Duruş Korrektoru Çanta", id: "2.5" }, { name: "“Əhval-Ruhiyyə” Bilərziyi", id: "2.6" }, { name: "Rəqəmsal Yelpik", id: "2.7" }, { name: "Avtomatik Çanta İşığı", id: "2.8" }, { name: "Temperatur Həssaslı Şərf", id: "2.9" }, { name: "Toxunuşla Dəyişən Naxış", id: "2.10" } ],
+        ECOLOGY: [ { name: "Avtonom İstixana", id: "3.1" }, { name: "Hava Keyfiyyəti Monitorinq Stansiyası", id: "3.2" }, { name: "Tullantıların Avtomatik Təsnifatçısı", id: "3.3" }, { name: "Ornitoloji Müşahidəçi", id: "3.4" }, { name: "Heliostat: Günəş İzləyici Panel", id: "3.5" }, { name: "“Ağıllı” Kompost Sistemi", id: "3.6" }, { name: "Meşə Yanğını Erkən Xəbərdarlıq Sistemi", id: "3.7" }, { name: "Su Sızıntısı Detektoru", id: "3.8" }, { name: "Api-Monitor: Arı Pətəyinə Nəzarət", id: "3.9" }, { name: "Torpaq Sürüşməsi Xəbərdarlığı", id: "3.10" } ],
+        GAMES_ENTERTAINMENT: [ { name: "Adaptiv Reaksiya Oyunu", id: "4.1" }, { name: "Jestlərlə İdarəetmə Konsolu", id: "4.2" }, { name: "Elektron Labirint", id: "4.3" }, { name: "“Simon” Yaddaş Platforması", id: "4.4" }, { name: "Rəqs Pedi", id: "4.5" }, { name: "Lazer Atıcılıq Poliqonu", id: "4.6" }, { name: "İnteraktiv Hekayə", id: "4.7" }, { name: "Stolüstü Oyun Köməkçisi (Dungeon Master)", id: "4.8" }, { name: "Texnoloji Xəzinə Axtarışı", id: "4.9" }, { name: "İnteraktiv Musiqi Qurğusu", id: "4.10" } ],
+        ROBOTICS: [ { name: "Xətt İzləyən Robot", id: "5.1" }, { name: "Maneədən Yayınan Robot", id: "5.2" }, { name: "Sensorlu Robot Əl", id: "5.3" }, { name: "Sumo Robotu", id: "5.4" }, { name: "Avtonom Anbar Köməkçisi", id: "5.5" }, { name: "Qrafik Plotter", id: "5.6" }, { name: "Təmizlikçi Robot Prototipi", id: "5.7" }, { name: "Özünü Balanslayan Robot", id: "5.8" }, { name: "Obyekt Tanıyan Kəşfiyyatçı", id: "5.9" }, { name: "Sürü Robotları (Swarm Robotics)", id: "5.10" } ],
+        URBAN_TECH: [ { name: "Adaptiv Svetofor Sistemi", id: "6.1" }, { name: "Ağıllı Parkinq Sistemi", id: "6.2" }, { name: "Avtomatlaşdırılmış Dəmiryol Keçidi", id: "6.3" }, { name: "Piyada Təhlükəsizliyi Platforması", id: "6.4" }, { name: "Ağıllı Küçə İşıqlandırması", id: "6.5" }, { name: "Sürətə Nəzarət Məntəqəsi", id: "6.6" }, { name: "İnteraktiv Avtobus Dayanacağı", id: "6.7" }, { name: "Velosiped üçün Təhlükəsizlik Sistemi", id: "6.8" }, { name: "Yol Səthinə Nəzarət", id: "6.9" }, { name: "Optimal Zibil Daşıma Marşrutu", id: "6.10" } ],
+        HEALTH_CARE: [ { name: "Duruş Korrektoru", id: "7.1" }, { name: "Hidratasiya Nəzarətçisi", id: "7.2" }, { name: "Stress İdarəetmə Cihazı", id: "7.3" }, { name: "Fizioterapiya Köməkçisi", id: "7.4" }, { name: "Dərman Qəbulu Xatırladıcısı", id: "7.5" }, { name: "Yuxu Keyfiyyəti Analizatoru", id: "7.6" }, { name: "Gigiyena Nəzarətçisi", id: "7.7" }, { name: "Meditasiya Bələdçisi", id: "7.8" }, { name: "UV İndeksi Monitoru", id: "7.9" }, { name: "Ağıllı Əsa", id: "7.10" } ],
+        SECURITY_LOGIC: [ { name: "Şifrəli Seyf", id: "8.1" }, { name: "Lazer Perimetr Mühafizəsi", id: "8.2" }, { name: "Biometrik Kilid", id: "8.3" }, { name: "Pəncərə və Qapı Mühafizə Sistemi", id: "8.4" }, { name: "Akustik Mühafizəçi", id: "8.5" }, { name: "Seysmik Siqnal Sistemi", id: "8.6" }, { name: "Yanğın Söndürmə Simulyatoru", id: "8.7" }, { name: "Hərəkət İzləyən Kamera Platforması", id: "8.8" }, { name: "Şübhəli Obyekt Detektoru", id: "8.9" }, { name: "Kriptoqrafik Mesajlaşma", id: "8.10" } ],
+        ART_DESIGN: [ { name: "İnteraktiv İşıq İnstalyasiyası", id: "9.1" }, { name: "Musiqili Fəvvarə", id: "9.2" }, { name: "Avtomatlaşdırılmış Kölgə Teatrı", id: "9.3" }, { name: "Kinetik Heykəl", id: "9.4" }, { name: "“Pixel Art” Paneli", id: "9.5" }, { name: "Rəng Təsnifatçısı Qurğusu", id: "9.6" }, { name: "Səs Mənzərəsi Generatoru", id: "9.7" }, { name: "Rəng Örnekleyici Əlcək", id: "9.8" }, { name: "Avtomatik Xəttat", id: "9.9" }, { name: "Holoqrafik Proyeksiya", id: "9.10" } ],
+        BUSINESS: [ { name: "Müştəri Axını Analizatoru", id: "10.1" }, { name: "“Ağıllı” Rəf Sistemi", id: "10.2" }, { name: "Müştəri Rəyi Terminalı", id: "10.3" }, { name: "İnteraktiv Vitrin", id: "10.4" }, { name: "Avtomatlaşdırılmış Satış Aparatı", id: "10.5" }, { name: "Növbə İdarəetmə Sistemi", id: "10.6" }, { name: "Dinamik Reklam Paneli", id: "10.7" }, { name: "Məhsul Tövsiyə Sistemi", id: "10.8" }, { name: "Anbar İqliminə Nəzarət", id: "10.9" }, { name: "Enerji Effektivliyi Sistemi", id: "10.10" } ]
+    };
+
+    // --- APP LOGIC ---
+    let state = {
+        currentStage: 'start', // 'student', 'parent', 'results'
+        currentQuestionIndex: 0,
+        scores: {}
+    };
+
+    const screens = {
+        start: document.getElementById('start-screen'),
+        questionnaire: document.getElementById('questionnaire-screen'),
+        results: document.getElementById('results-screen')
+    };
+    const startBtn = document.getElementById('start-btn');
+    const questionContainer = document.getElementById('question-container');
+    const progressBar = document.getElementById('progress-bar');
+    const resultsContainer = document.getElementById('results-container');
+    const restartBtn = document.getElementById('restart-btn');
+    const quizTitle = document.getElementById('quiz-title');
+    const quizSubtitle = document.getElementById('quiz-subtitle');
+
+    function initializeScores() {
+        Object.keys(SCORE_PROFILES).forEach(key => {
+            state.scores[key] = { student: 0, parent: 0, total: 0 };
+        });
+    }
+
+    function showScreen(screenName) {
+        Object.values(screens).forEach(s => s.classList.remove('active'));
+        screens[screenName].classList.add('active');
+    }
+
+    function startQuiz() {
+        state.currentStage = 'student';
+        state.currentQuestionIndex = 0;
+        initializeScores();
+        updateQuizUI();
+        showScreen('questionnaire');
+    }
+
+    function updateQuizUI() {
+        const isStudent = state.currentStage === 'student';
+        const questions = isStudent ? studentQuestions : parentQuestions;
+
+        quizTitle.textContent = isStudent ? "Gənc İxtiraçının Növbəsi" : "Valideynin Növbəsi";
+        quizSubtitle.textContent = isStudent ? "Bu sualları övladınızın cavablandırması daha dəqiq nəticə verər." : "Bu suallar sizin gözləntilərinizi anlamaq üçündür.";
+
+        const progress = (state.currentQuestionIndex / questions.length) * 100;
+        progressBar.style.width = `${progress}%`;
+
+        showQuestion();
+    }
+
+    function showQuestion() {
+        const isStudent = state.currentStage === 'student';
+        const questions = isStudent ? studentQuestions : parentQuestions;
+        const question = questions[state.currentQuestionIndex];
+
+        if (!question) {
+            if(isStudent) {
+                state.currentStage = 'parent';
+                state.currentQuestionIndex = 0;
+                updateQuizUI();
+            } else {
+                calculateAndShowResults();
+            }
+            return;
+        }
+
+        let optionsHtml = question.options.map((option) => `
+                <button class="option-btn w-full text-left bg-white p-4 my-2 rounded-lg border-2 border-gray-200" data-scores='${JSON.stringify(option.scores)}'>
+                    ${option.text}
+                </button>
+            `).join('');
+
+        questionContainer.innerHTML = `
+                <div class="question-card active">
+                    <h3 class="text-xl md:text-2xl font-semibold mb-6 text-gray-800">${state.currentQuestionIndex + 1}. ${question.text}</h3>
+                    <div class="options-container">${optionsHtml}</div>
+                </div>
+            `;
+
+        document.querySelectorAll('.option-btn').forEach(button => {
+            button.addEventListener('click', handleAnswer);
+        });
+    }
+
+    function handleAnswer(event) {
+        const scoresData = JSON.parse(event.currentTarget.dataset.scores);
+        const scoreType = state.currentStage; // 'student' or 'parent'
+
+        Object.keys(scoresData).forEach(key => {
+            if(state.scores[key]){
+                state.scores[key][scoreType] += scoresData[key];
+            }
+        });
+
+        state.currentQuestionIndex++;
+        updateQuizUI();
+    }
+
+    function calculateAndShowResults() {
+        // Calculate final scores with weights
+        Object.keys(state.scores).forEach(key => {
+            const studentScore = state.scores[key].student * 0.7; // 70% weight for student
+            const parentScore = state.scores[key].parent * 0.3; // 30% weight for parent
+            state.scores[key].total = studentScore + parentScore;
+        });
+
+        const sortedScores = Object.entries(state.scores)
+            .map(([key, value]) => ({ key, ...value }))
+            .sort((a, b) => b.total - a.total);
+
+        const top3Profiles = sortedScores.slice(0, 3);
+
+        resultsContainer.innerHTML = ''; // Clear previous results
+        top3Profiles.forEach((profile, index) => {
+            const profileInfo = SCORE_PROFILES[profile.key];
+            const projectsForProfile = allProjects[profile.key];
+
+            // Get 3 random projects from the category
+            const randomProjects = [...projectsForProfile].sort(() => 0.5 - Math.random()).slice(0, 3);
+
+            const projectLinksHtml = randomProjects.map(p =>
+                `<li class="py-1"><span class="font-semibold text-indigo-600">${p.name}</span></li>`
+            ).join('');
+
+            resultsContainer.innerHTML += `
+                    <div class="bg-gray-50 p-6 rounded-xl border border-gray-200 mb-4">
+                        <div class="flex items-center mb-3">
+                            <span class="text-4xl mr-4">${profileInfo.icon}</span>
+                            <div>
+                                <h3 class="font-bold text-2xl text-indigo-700">${profileInfo.name}</h3>
+                                <p class="text-gray-500">Uyğunluq səviyyəsi: Yüksək</p>
+                            </div>
+                        </div>
+                        <p class="font-semibold text-gray-700 mt-4 mb-2">Bu sahəyə aid tövsiyə olunan layihələr:</p>
+                        <ul class="list-none space-y-1">
+                            ${projectLinksHtml}
+                        </ul>
+                    </div>
+                `;
+        });
+
+        showScreen('results');
+    }
+
+    function restartQuiz() {
+        showScreen('start');
+    }
+
+    startBtn.addEventListener('click', startQuiz);
+    restartBtn.addEventListener('click', restartQuiz);
+
+</script>
+</body>
+</html>
